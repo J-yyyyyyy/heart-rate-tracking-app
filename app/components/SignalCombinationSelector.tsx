@@ -1,0 +1,41 @@
+'use client';
+
+export type SignalCombinationMode = 'default';
+
+const SIGNAL_COMBINATION_OPTIONS: {
+  value: SignalCombinationMode;
+  label: string;
+}[] = [{ value: 'default', label: 'Default (2R−G−B)' }];
+
+interface SignalCombinationSelectorProps {
+  value: SignalCombinationMode;
+  onChange: (value: SignalCombinationMode) => void;
+}
+
+export default function SignalCombinationSelector({
+  value,
+  onChange,
+}: SignalCombinationSelectorProps) {
+  return (
+    <div className="mt-2">
+      <label
+        htmlFor="signal-combination"
+        className="block text-sm font-medium text-gray-700"
+      >
+        Signal combination
+      </label>
+      <select
+        id="signal-combination"
+        value={value}
+        onChange={(e) => onChange(e.target.value as SignalCombinationMode)}
+        className="mt-1 block w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+      >
+        {SIGNAL_COMBINATION_OPTIONS.map((opt) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}

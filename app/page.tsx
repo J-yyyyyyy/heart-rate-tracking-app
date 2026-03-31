@@ -27,7 +27,12 @@ export default function Home() {
   type SegmentLabel = 'good' | 'bad';
   const [segmentLabel, setSegmentLabel] = useState<SegmentLabel>('good');
   const [segmentStatus, setSegmentStatus] = useState<string | null>(null);
+  const [labeledSegments, setLabeledSegments] = useState<{ ppgData: number[]; label: string }[]>([]);
 
+  const modelInputRef = useRef<HTMLInputElement>(null);
+  const scalerInputRef = useRef<HTMLInputElement>(null);
+  const [uploadStatus, setUploadStatus] = useState<string | null>(null);
+  
   const [inferenceResult, setInferenceResult] = useState<{
     label: string | null;
     confidence: number;
@@ -105,11 +110,27 @@ export default function Home() {
         body: JSON.stringify({ ppgData: ppgSegment, label: segmentLabel }),
       });
       const data = await res.json();
-      if (data.success) setSegmentStatus(`Saved as ${segmentLabel}`);
-      else setSegmentStatus('Error: ' + (data.error || 'Unknown'));
+      if (data.success) {
+        setSegmentStatus(`Saved as ${segmentLabel}`);
+        setLabeledSegments((prev) => [...prev, { ppgData: ppgSegment, label: segmentLabel }]);
+      } else {
+        setSegmentStatus('Error: ' + (data.error || 'Unknown'));
+      }
     } catch {
       setSegmentStatus('Error: request failed');
     }
+  }
+
+  function downloadLabeledJson() {
+    if (labeledSegments.length === 0) return;
+    const json = JSON.stringify(labeledSegments, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'labeled_records.json';
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   async function saveRecord() {
@@ -148,6 +169,93 @@ export default function Home() {
     });
     const data = await res.json();
     setApiResponse(data);
+  }
+  
+  async function handleUpload() {
+    const modelFile = modelInputRef.current?.files?.[0];
+    const scalerFile = scalerInputRef.current?.files?.[0];
+    if (!modelFile || !scalerFile) {
+      setUploadStatus('Select both files');
+      return;
+    }
+    
+    // Convert file to base64
+    const toBase64 = (file: File) => 
+      file.arrayBuffer().then(buf => btoa(String.fromCharCode(...new Uint8Array(buf))));
+    
+    try {
+      const model = await toBase64(modelFile);
+      const scaler = await toBase64(scalerFile);
+      const res = await fetch('/api/upload-model', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model, scaler }),
+      });
+      const data = await res.json();
+      setUploadStatus(data.success ? 'Uploaded!' : data.error);
+    } catch {
+      setUploadStatus('Upload failed');
+    }
+  }
+    // 在 Home 组件内部添加这些状态
+  const [serverResult, setServerResult] = useState<{
+    heartRate: { bpm: number; confidence: number };
+    hrv: { sdnn: number; confidence: number };
+    valleys?: number[];
+    loading?: boolean;
+    error?: string;
+  } | null>(null);
+
+  // 添加服务器分析函数
+  async function analyzeOnServer() {
+    if (samples.length < MIN_SAMPLES_FOR_DETECTION) {
+      setServerResult({
+        heartRate: { bpm: 0, confidence: 0 },
+        hrv: { sdnn: 0, confidence: 0 },
+        error: `Need at least ${MIN_SAMPLES_FOR_DETECTION} samples`
+      });
+      return;
+    }
+
+    setServerResult(prev => prev ? { ...prev, loading: true, error: undefined } : {
+      heartRate: { bpm: 0, confidence: 0 },
+      hrv: { sdnn: 0, confidence: 0 },
+      loading: true
+    });
+
+    try {
+      const res = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          samples: samples.slice(-SAMPLES_TO_KEEP),
+          fps: 30, // 你的采样帧率，根据实际情况调整
+        }),
+      });
+      
+      const data = await res.json();
+      
+      if (data.error) {
+        setServerResult({
+          heartRate: { bpm: 0, confidence: 0 },
+          hrv: { sdnn: 0, confidence: 0 },
+          error: data.error
+        });
+      } else {
+        setServerResult({
+          heartRate: data.heartRate,
+          hrv: data.hrv,
+          valleys: data.valleys,
+          loading: false
+        });
+      }
+    } catch (error) {
+      setServerResult({
+        heartRate: { bpm: 0, confidence: 0 },
+        hrv: { sdnn: 0, confidence: 0 },
+        error: 'Request failed - is Flask running?'
+      });
+    }
   }
 
   useEffect(() => {
@@ -207,159 +315,216 @@ export default function Home() {
   }, [isRecording, signalCombination]);
 
   return (
-    <main className="p-8">
-      <h1 className="text-xl font-bold mb-4">Canvas sampling and POST</h1>
+    <main className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-6">
+      <div className="max-w-7xl mx-auto">
+        
+        {/* Header */}
+        <header className="text-center mb-8">
+          <h1 className="text-4xl font-bold text-white mb-2">PPG Heart Rate Monitor</h1>
+          <p className="text-purple-200">Real-time photoplethysmography analysis</p>
+        </header>
 
-      <div className="mb-4">
-        <h2 className="text-lg font-semibold mb-2">Camera</h2>
-        <div className="w-96 max-w-full border border-gray-400 bg-black min-h-[240px] flex items-center justify-center overflow-hidden rounded">
-          <video ref={videoRef} autoPlay muted playsInline className="hidden" />
-          {isRecording ? (
-            <canvas
-              ref={canvasRef}
-              className="w-full h-full min-h-[240px] object-contain"
-            />
-          ) : (
-            <span className="text-gray-500 text-sm">
-              Start recording to see camera
-            </span>
-          )}
-        </div>
-        <div className="mt-2">
-          <button
-            onClick={() => setIsRecording((r) => !r)}
-            className="px-4 py-2 bg-green-500 text-white rounded"
-          >
-            {isRecording ? 'Stop recording' : 'Start recording'}
-          </button>
-          {error && <p className="text-red-600 mt-2">{error}</p>}
-        </div>
-      </div>
+        {/* Main Grid: 2 columns on desktop, 1 on mobile */}
+        <div className="grid lg:grid-cols-2 gap-6">
+          
+          {/* LEFT COLUMN: Camera + Chart */}
+          <div className="space-y-6">
+            {/* Camera Card */}
+            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-4 border border-white/20">
+              <h2 className="text-xl font-semibold text-white mb-3">Camera</h2>
+              <div className="bg-black rounded-xl overflow-hidden aspect-video flex items-center justify-center">
+                <video ref={videoRef} autoPlay muted playsInline className="hidden" />
+                {isRecording ? (
+                  <canvas ref={canvasRef} className="w-full h-full object-contain" />
+                ) : (
+                  <span className="text-gray-500 text-sm">Start recording to see camera</span>
+                )}
+              </div>
+              <div className="mt-4">
+                <button
+                  onClick={() => setIsRecording((r) => !r)}
+                  className={`px-6 py-2 rounded-full font-semibold transition ${
+                    isRecording 
+                      ? 'bg-red-500 hover:bg-red-600 text-white' 
+                      : 'bg-green-500 hover:bg-green-600 text-white'
+                  }`}
+                >
+                  {isRecording ? '⏹ Stop Recording' : '▶ Start Recording'}
+                </button>
+                {error && <p className="text-red-400 mt-2 text-sm">{error}</p>}
+              </div>
+            </div>
 
-      <div className="mt-4">
-        <ChartComponent
-          ppgData={samples.slice(-SAMPLES_TO_KEEP)}
-          valleys={valleys}
-        />
-        <SignalCombinationSelector
-          value={signalCombination}
-          onChange={setSignalCombination}
-        />
-        <div className="mt-2 flex flex-wrap gap-4">
-          <SimpleCard
-            title="Heart rate"
-            value={heartRate.bpm > 0 ? `${heartRate.bpm} bpm` : '--'}
-          />
-          <SimpleCard
-            title="Confidence"
-            value={
-              heartRate.confidence > 0
-                ? `${heartRate.confidence.toFixed(0)}%`
-                : '--'
-            }
-          />
-          <SimpleCard
-            title="HRV"
-            value={hrv.sdnn > 0 ? `${hrv.sdnn} ms` : '--'}
-          />
-        </div>
-      </div>
-      <div className="mt-4 flex flex-wrap gap-4">
-        <SimpleCard
-          title="Current PPG"
-          value={samples[samples.length - 1]?.toFixed(1) ?? '-'}
-        />
-        <SimpleCard
-          title="Last 20"
-          value={
-            samples
-              .slice(-20)
-              .map((s) => s.toFixed(0))
-              .join(', ') || '-'
-          }
-        />
-      </div>
-      <div className="mt-4 flex flex-wrap gap-4">
-          <button
-            onClick={checkBackend}
-            className="px-4 py-2 bg-gray-500 text-white rounded"
-          >
-            Check backend
-          </button>
-          <button
-            onClick={saveRecord}
-            className="px-4 py-2 bg-green-500 text-white rounded"
-          >
-            Save record
-          </button>
-        </div>
-        {backendStatus && <p className="mt-2 text-sm">{backendStatus}</p>}
-        {saveStatus && <p className="mt-2 text-sm">{saveStatus}</p>}
-
-        <div className="mt-4 border-t pt-4">
-          <h3 className="font-medium mb-2">Collect labeled data (for ML)</h3>
-          <p className="text-sm text-gray-600 mb-2">
-            Choose a label, watch the signal until it matches, then click Send to
-            save this segment.
-          </p>
-          <div className="flex items-center gap-4 mb-2">
-            <label className="flex items-center gap-2">
-              <input
-                type="radio"
-                name="segmentLabel"
-                checked={segmentLabel === 'good'}
-                onChange={() => setSegmentLabel('good')}
+            {/* Chart Card */}
+            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-4 border border-white/20">
+              <div className="flex justify-between items-center mb-3">
+                <h2 className="text-xl font-semibold text-white">PPG Signal</h2>
+                <SignalCombinationSelector
+                  value={signalCombination}
+                  onChange={setSignalCombination}
+                />
+              </div>
+              <ChartComponent
+                ppgData={samples.slice(-SAMPLES_TO_KEEP)}
+                valleys={valleys}
               />
-              Good
-            </label>
-            <label className="flex items-center gap-2">
-              <input
-                type="radio"
-                name="segmentLabel"
-                checked={segmentLabel === 'bad'}
-                onChange={() => setSegmentLabel('bad')}
-              />
-              Bad
-            </label>
+            </div>
           </div>
-          <button
-            onClick={sendLabeledSegment}
-            className="px-4 py-2 bg-amber-500 text-white rounded"
-          >
-            Send labeled segment
-          </button>
-          {segmentStatus && <p className="mt-2 text-sm">{segmentStatus}</p>}
-        </div>
 
-        <div className="mt-4 border-t pt-4">
-          <h3 className="font-medium mb-2">Signal quality (ML inference)</h3>
-          <p className="text-sm text-gray-600 mb-2">
-            Quality updates continuously while recording (when enough samples are
-            available).
-          </p>
-          <div className="mt-2 text-sm">
-            {inferenceResult?.message && (
-              <p className="text-gray-600">{inferenceResult.message}</p>
-            )}
-            {inferenceResult?.label ? (
-              <p>
-                Predicted: <strong>{inferenceResult.label}</strong>
-                {inferenceResult.confidence > 0 &&
-                  ` (${(inferenceResult.confidence * 100).toFixed(0)}% confidence)`}
-              </p>
-            ) : (
-              <p className="text-gray-500">
-                {isRecording && samples.length < MIN_SAMPLES_FOR_DETECTION
-                  ? 'Collecting samples…'
-                  : !isRecording
-                    ? 'Start recording for quality inference'
-                    : '--'}
-              </p>
-            )}
+          {/* RIGHT COLUMN: Metrics + Controls */}
+          <div className="space-y-6">
+            {/* Metrics Cards Row */}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="bg-gradient-to-br from-blue-500 to-blue-700 rounded-xl p-4 text-white text-center">
+                <p className="text-sm opacity-80">Heart Rate</p>
+                <p className="text-3xl font-bold">{heartRate.bpm > 0 ? `${heartRate.bpm}` : '--'}</p>
+                <p className="text-xs opacity-75">bpm</p>
+              </div>
+              <div className="bg-gradient-to-br from-green-500 to-green-700 rounded-xl p-4 text-white text-center">
+                <p className="text-sm opacity-80">Confidence</p>
+                <p className="text-3xl font-bold">{heartRate.confidence > 0 ? `${(heartRate.confidence * 100).toFixed(0)}` : '--'}</p>
+                <p className="text-xs opacity-75">%</p>
+              </div>
+              <div className="bg-gradient-to-br from-purple-500 to-purple-700 rounded-xl p-4 text-white text-center">
+                <p className="text-sm opacity-80">HRV (SDNN)</p>
+                <p className="text-3xl font-bold">{hrv.sdnn > 0 ? `${hrv.sdnn}` : '--'}</p>
+                <p className="text-xs opacity-75">ms</p>
+              </div>
+            </div>
+
+            {/* Live Data Card */}
+            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-4 border border-white/20">
+              <h2 className="text-lg font-semibold text-white mb-2">Live Data</h2>
+              <div className="flex justify-between">
+                <div>
+                  <p className="text-sm text-purple-200">Current PPG</p>
+                  <p className="text-2xl font-mono text-white">{samples[samples.length - 1]?.toFixed(1) ?? '-'}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-purple-200">Last 20</p>
+                  <p className="text-sm font-mono text-white max-w-[200px] truncate">
+                    {samples.slice(-20).map((s) => s.toFixed(0)).join(', ') || '-'}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Actions Card */}
+            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-4 border border-white/20">
+              <h2 className="text-lg font-semibold text-white mb-2">Actions</h2>
+              <div className="flex gap-3">
+                <button onClick={checkBackend} className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition">
+                  Check Backend
+                </button>
+                <button onClick={saveRecord} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition">
+                  Save Record
+                </button>
+              </div>
+              {backendStatus && <p className="mt-2 text-sm text-purple-200">{backendStatus}</p>}
+              {saveStatus && <p className="mt-2 text-sm text-purple-200">{saveStatus}</p>}
+            </div>
+
+            {/* ML Section: Collect Labeled Data */}
+            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-4 border border-white/20">
+              <h2 className="text-lg font-semibold text-white mb-2">📝 Collect Training Data</h2>
+              <p className="text-sm text-purple-200 mb-3">Label the current PPG segment for ML training</p>
+              
+              <div className="flex items-center gap-4 mb-3">
+                <label className="flex items-center gap-2 text-white">
+                  <input type="radio" name="segmentLabel" checked={segmentLabel === 'good'} onChange={() => setSegmentLabel('good')} />
+                  <span className="text-green-400">✓ Good</span>
+                </label>
+                <label className="flex items-center gap-2 text-white">
+                  <input type="radio" name="segmentLabel" checked={segmentLabel === 'bad'} onChange={() => setSegmentLabel('bad')} />
+                  <span className="text-red-400">✗ Bad</span>
+                </label>
+              </div>
+              
+              <div className="flex gap-2">
+                <button onClick={sendLabeledSegment} className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition">
+                  Save Segment
+                </button>
+                <button onClick={downloadLabeledJson} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition disabled:opacity-50" disabled={labeledSegments.length === 0}>
+                  Download ({labeledSegments.length})
+                </button>
+              </div>
+              {segmentStatus && <p className="mt-2 text-sm text-purple-200">{segmentStatus}</p>}
+            </div>
+
+            {/* ML Section: Signal Quality Inference */}
+            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-4 border border-white/20">
+              <h2 className="text-lg font-semibold text-white mb-2">🤖 Quality Inference</h2>
+              <div className="text-sm">
+                {inferenceResult?.message && <p className="text-purple-200">{inferenceResult.message}</p>}
+                {inferenceResult?.label ? (
+                  <p className="text-white">
+                    Predicted: <strong className={inferenceResult.label === 'good' ? 'text-green-400' : 'text-red-400'}>{inferenceResult.label}</strong>
+                    {inferenceResult.confidence > 0 && ` (${(inferenceResult.confidence * 100).toFixed(0)}% confidence)`}
+                  </p>
+                ) : (
+                  <p className="text-purple-200">
+                    {isRecording && samples.length < MIN_SAMPLES_FOR_DETECTION ? 'Collecting samples…' :
+                    !isRecording ? 'Start recording' : '--'}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* ML Section: Upload Model */}
+            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-4 border border-white/20">
+              <h2 className="text-lg font-semibold text-white mb-2">📤 Upload Model</h2>
+              <div className="mb-2">
+                <p className="text-sm text-purple-200">Model file (.joblib):</p>
+                <input type="file" ref={modelInputRef} accept=".joblib" className="text-sm text-white file:mr-2 file:py-1 file:px-3 file:rounded-lg file:border-0 file:bg-purple-600 file:text-white hover:file:bg-purple-700" />
+              </div>
+              <div className="mb-3">
+                <p className="text-sm text-purple-200">Scaler file (.joblib):</p>
+                <input type="file" ref={scalerInputRef} accept=".joblib" className="text-sm text-white file:mr-2 file:py-1 file:px-3 file:rounded-lg file:border-0 file:bg-purple-600 file:text-white hover:file:bg-purple-700" />
+              </div>
+              <button onClick={handleUpload} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition">
+                Upload Model & Scaler
+              </button>
+              {uploadStatus && <p className="mt-2 text-sm text-purple-200">{uploadStatus}</p>}
+            </div>
+
+            {/* Server-side Analysis */}
+            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-4 border border-white/20">
+              <h2 className="text-lg font-semibold text-white mb-2">🖥 Server Analysis</h2>
+              <button onClick={analyzeOnServer} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition" disabled={serverResult?.loading}>
+                {serverResult?.loading ? 'Analyzing...' : 'Run Server Analysis'}
+              </button>
+              
+              {serverResult && (
+                <div className="mt-3 p-3 bg-black/30 rounded-lg">
+                  {serverResult.error ? (
+                    <p className="text-red-400 text-sm">{serverResult.error}</p>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-2 gap-3 text-center">
+                        <div>
+                          <p className="text-xs text-purple-200">Server HR</p>
+                          <p className="text-xl font-bold text-white">{serverResult.heartRate.bpm > 0 ? `${serverResult.heartRate.bpm} bpm` : '--'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-purple-200">Server HRV</p>
+                          <p className="text-xl font-bold text-white">{serverResult.hrv.sdnn > 0 ? `${serverResult.hrv.sdnn} ms` : '--'}</p>
+                        </div>
+                      </div>
+                      {heartRate.bpm > 0 && serverResult.heartRate.bpm > 0 && (
+                        <div className="mt-2 pt-2 border-t border-white/20 text-center">
+                          <p className="text-xs text-purple-200">
+                            Difference: {Math.abs(heartRate.bpm - serverResult.heartRate.bpm).toFixed(1)} bpm
+                          </p>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
-      </main>
-
-
+      </div>
+    </main>
   );
 }

@@ -100,9 +100,24 @@ export function computePPGFromRGB(
   gSum: number,
   bSum: number,
   pixelCount: number,
-  mode: string,
+  mode: SignalCombinationMode
 ): number {
-  // Default: red channel (good for flash + finger over camera). Assignment: add more modes.
-  if (mode === 'default') return (2 * rSum - gSum - bSum) / pixelCount;
-  return (2 * rSum - gSum - bSum) / pixelCount; // fallback
+  const r = rSum / pixelCount;
+  const g = gSum / pixelCount;
+  const b = bSum / pixelCount;
+  
+  switch (mode) {
+    case 'default':
+      return 2 * r - g - b;
+    case 'redOnly':
+      return r;
+    case 'greenOnly':
+      return g;
+    case 'blueOnly':
+      return b;
+    case '2xG-R-B':
+      return 2 * g - r - b;
+    default:
+      return 2 * r - g - b;
+  }
 }

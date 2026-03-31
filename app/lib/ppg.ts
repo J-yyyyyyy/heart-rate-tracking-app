@@ -1,6 +1,6 @@
 // app/lib/ppg.ts — pure signal helpers (no React, no DOM)
 import type { Valley, HeartRateResult, HRVResult } from '../types';
-
+import { SignalCombinationMode } from '../components/SignalCombinationSelector';
 export const FPS = 30;
 /** 10 seconds at 30 fps. Use consistently for chart, valley detection, save, and inference. */
 export const SAMPLES_TO_KEEP = 300;

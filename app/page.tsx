@@ -4,6 +4,7 @@ import SimpleCard from './components/SimpleCard';
 import ChartComponent from './components/ChartComponent';
 import { useState, useEffect, useRef } from 'react';
 import usePPGFromSamples from './hooks/usePPGFromSamples';
+
 import {
   computePPGFromRGB,
   SAMPLES_TO_KEEP,

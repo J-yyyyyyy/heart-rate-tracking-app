@@ -8,6 +8,7 @@ export const SAMPLES_TO_KEEP = 300;
 export const MIN_SAMPLES_FOR_DETECTION = 60;
 export const MIN_RR_S = 0.4;
 export const MAX_RR_S = 2.0;
+export type SignalCombinationMode = 'default' | 'redOnly' | 'greenOnly' | 'blueOnly' | '2xG-R-B';
 
 export function normalizeSignal(signal: number[]): number[] {
   const min = Math.min(...signal);

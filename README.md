@@ -1,36 +1,61 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# PPG Heart-Rate Monitor
 
-## Getting Started
+## Prerequisites
+Node.js 18+, Python 3.9+, npm or yarn
 
-First, run the development server:
+## Local Setup
+### Backend
+cd backend && pip install -r requirements.txt && python -m flask --app app run --port 5000
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+### Frontend
+Create .env.local with FLASK_URL=http://127.0.0.1:5000
+npm install && npm run dev
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:3000
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Training
+1. Collect labeled segments (good/bad)
+2. Click "Download labeled_records.json"
+3. Save to backend/labeled_records.json
+4. Run: cd backend && python train_quality_model.py
+5. Upload model and scaler via the app UI
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Deployment
+Frontend: Vercel. Backend: PythonAnywhere. See Hosting Guide.
 
-## Learn More
+## Links
+- Frontend: https://heart-rate-tracking-app.vercel.app
+- Backend: https://carolcao.pythonanywhere.com
+- GitHub: https://github.com/J-yyyyyyy/heart-rate-tracking-app
 
-To learn more about Next.js, take a look at the following resources:
+## Features
+- Real-time PPG signal extraction from camera
+- Heart rate and HRV (SDNN) calculation
+- 5 signal combination modes: Default (2R−G−B), Red only, Green only, Blue only, 2×G−R−B
+- Collect labeled segments (Good/Bad) for ML training
+- Download labeled data as JSON
+- Train Random Forest classifier with 12 features
+- Upload trained model via web UI
+- Real-time signal quality inference
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## API Endpoints
+- GET /api/health - Backend health check
+- POST /api/save-record - Save PPG record
+- POST /api/save-labeled-segment - Save labeled segment
+- POST /api/infer-quality - ML quality inference
+- POST /api/upload-model - Upload trained model (base64)
+- POST /api/analyze - Server-side valley detection
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Assignment Requirements Checklist
+- GitHub repository (public): ✅
+- Camera, PPG chart, heart rate, HRV: ✅
+- Send labeled segments (good/bad): ✅
+- Download JSON button: ✅
+- Upload model & scaler buttons: ✅
+- 3+ extra signal combinations (5 total): ✅
+- Modified layout (different from sample): ✅
+- Modified feature extraction (12 features): ✅
+- Modified ML method (Random Forest): ✅
+- Own trained model (≥10 good, ≥10 bad): ✅
+- Deployed on Vercel: ✅
+- Deployed on PythonAnywhere: ✅

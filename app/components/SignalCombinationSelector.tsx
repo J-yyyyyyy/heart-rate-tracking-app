@@ -1,8 +1,13 @@
 'use client';
 
-export type SignalCombinationMode = 'default' | 'redOnly' | 'greenOnly' | 'blueOnly' | '2xG-R-B';
+import { SignalCombinationMode } from '../lib/ppg';
 
-const SIGNAL_COMBINATION_OPTIONS = [
+interface Props {
+  value: SignalCombinationMode;
+  onChange: (mode: SignalCombinationMode) => void;
+}
+
+const SIGNAL_COMBINATION_OPTIONS: { value: SignalCombinationMode; label: string }[] = [
   { value: 'default', label: 'Default (2R−G−B)' },
   { value: 'redOnly', label: 'Red only' },
   { value: 'greenOnly', label: 'Green only' },
@@ -10,32 +15,17 @@ const SIGNAL_COMBINATION_OPTIONS = [
   { value: '2xG-R-B', label: '2×G−R−B' },
 ];
 
-interface SignalCombinationSelectorProps {
-  value: SignalCombinationMode;
-  onChange: (value: SignalCombinationMode) => void;
-}
-
-export default function SignalCombinationSelector({
-  value,
-  onChange,
-}: SignalCombinationSelectorProps) {
+export default function SignalCombinationSelector({ value, onChange }: Props) {
   return (
-    <div className="mt-2">
-      <label
-        htmlFor="signal-combination"
-        className="block text-sm font-medium text-gray-700"
-      >
-        Signal combination
-      </label>
+    <div className="w-56">
       <select
-        id="signal-combination"
         value={value}
         onChange={(e) => onChange(e.target.value as SignalCombinationMode)}
-        className="mt-1 block w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+        className="w-full px-4 py-3 text-base font-medium text-gray-900 bg-white border-2 border-gray-300 rounded-xl shadow-md cursor-pointer hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all"
       >
-        {SIGNAL_COMBINATION_OPTIONS.map((opt) => (
-          <option key={opt.value} value={opt.value}>
-            {opt.label}
+        {SIGNAL_COMBINATION_OPTIONS.map((option) => (
+          <option key={option.value} value={option.value} className="text-gray-900 bg-white">
+            {option.label}
           </option>
         ))}
       </select>

@@ -1,6 +1,6 @@
 'use client';
 
-import { SignalCombinationMode } from '../lib/ppg';
+export type SignalCombinationMode = 'default' | 'redOnly' | 'greenOnly' | 'blueOnly' | '2xG-R-B';
 
 interface Props {
   value: SignalCombinationMode;

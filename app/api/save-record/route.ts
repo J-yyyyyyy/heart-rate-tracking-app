@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-const flaskUrl = process.env.FLASK_URL || 'http://127.0.0.1:5000';
+const flaskUrl = process.env.NEXT_PUBLIC_FLASK_URL || 'http://127.0.0.1:5000';
 
 export async function POST(request: Request) {
   try {
